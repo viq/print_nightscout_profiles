@@ -19,6 +19,43 @@ from texttable import Texttable
 
 logging.basicConfig(level=logging.INFO)
 
+TIMED_ENTRIES = ['carbratio', 'sens', 'basal', 'target_low', 'target_high']
+
+
+def normalize(profile, entry):
+    """
+    Set entry to blank if it doesn't exist, thus avoiding KeyError
+    """
+    try:
+        if profile[entry]:
+            pass
+    except KeyError:
+        profile[entry] = ''
+
+
+def normalize_entry(entry):
+    """
+    Clean up an entry before further processing
+    """
+    logging.debug("Normalizing entry: %s", entry)
+    try:
+        if entry["timeAsSeconds"]:
+            pass
+    except KeyError:
+        entry_timeasseconds = datetime.strptime(entry["time"], "%H:%M")
+        entry[
+            "timeAsSeconds"] = 3600 * entry_timeasseconds.hour + 60 * entry_timeasseconds.minute
+    try:
+        if entry["time"]:
+            pass
+    except KeyError:
+        entry_hour = int(entry['timeAsSeconds'] / 3600)
+        entry_minute = int(entry['timeAsSeconds'] % 60)
+        entry["time"] = str(entry_hour).rjust(
+            2, '0') + ":" + str(entry_minute).rjust(2, '0')
+    entry["start"] = entry["time"] + ":00"
+    entry["minutes"] = int(entry["timeAsSeconds"]) / 60
+
 
 def get_profile_switches(nightscout, token, date_from, count):
     """
@@ -27,7 +64,7 @@ def get_profile_switches(nightscout, token, date_from, count):
     p_url = (
         nightscout +
         "/api/v1/treatments.json?find[eventType][$eq]=Profile%20Switch&count="
-        + count + "&find\[created_at\]\[$gte\]=" + date_from)
+        + count + "&find[created_at][$gte]=" + date_from)
     if token is not None:
         p_url = p_url + "&token=" + token
     p_switch = requests.get(p_url).json()
@@ -37,6 +74,11 @@ def get_profile_switches(nightscout, token, date_from, count):
             profile['profile'], profile['created_at'], profile['duration']))
         extracted_profile = json.loads(profile['profileJson'])
         extracted_profile['name'] = profile['profile']
+        for key in ['timezone', 'delay', 'startDate']:
+            normalize(extracted_profile, key)
+        for entry_type in TIMED_ENTRIES:
+            for entry in extracted_profile[entry_type]:
+                normalize_entry(entry)
         display_text(extracted_profile)
 
 
